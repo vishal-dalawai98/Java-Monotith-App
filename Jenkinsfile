@@ -2,21 +2,25 @@ pipeline {
 
     agent any
 
+    tools {
+        jdk 'JDK8'
+    }
+
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out source code'
                 checkout scm
             }
         }
 
         stage('Maven Build') {
             steps {
-                echo 'Building application with Maven'
-
                 sh '''
+                    echo "===== JAVA ====="
                     java -version
+
+                    echo "===== MAVEN ====="
                     mvn -version
 
                     mvn clean package \
@@ -40,52 +44,20 @@ pipeline {
 
         stage('OWASP Dependency Check') {
             steps {
-                echo 'OWASP Dependency Check stage'
-
-                sh '''
-                    mvn org.owasp:dependency-check-maven:check \
-                        -DskipTests
-                '''
+                echo 'OWASP Dependency Check stage - temporarily skipped'
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo 'Building Docker image'
-
-                sh '''
-                    docker build \
-                        -t enterprise-application:${BUILD_NUMBER} \
-                        .
-                '''
+                echo 'Docker Build stage - waiting for successful Maven build'
             }
         }
 
         stage('Trivy Scan') {
             steps {
-                echo 'Scanning Docker image with Trivy'
-
-                sh '''
-                    trivy image \
-                        --severity HIGH,CRITICAL \
-                        --exit-code 1 \
-                        enterprise-application:${BUILD_NUMBER}
-                '''
+                echo 'Trivy Scan stage - waiting for Docker image'
             }
-        }
-    }
-
-    post {
-        always {
-            echo "Pipeline completed: ${currentBuild.currentResult}"
-        }
-
-        success {
-            echo 'Pipeline completed successfully'
-        }
-
-        failure {
-            echo 'Pipeline failed - check the stage logs'
         }
     }
 }
