@@ -1,45 +1,40 @@
 pipeline {
-
     agent any
+
+    tools {
+        jdk 'JDK8'
+    }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo '========================================'
-                echo 'CHECKOUT'
-                echo '========================================'
-
                 checkout scm
             }
         }
 
         stage('Maven Build') {
             steps {
-                echo '========================================'
-                echo 'MAVEN BUILD'
-                echo '========================================'
-
                 sh '''
+                    set -e
+
                     export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
                     export PATH="$JAVA_HOME/bin:/usr/bin:/bin"
 
-                    echo "JAVA_HOME=$JAVA_HOME"
-
-                    echo "----- Java -----"
-                    which java
-                    readlink -f "$(which java)"
+                    echo "========================================"
+                    echo "JAVA"
+                    echo "========================================"
                     java -version
 
-                    echo "----- Javac -----"
-                    which javac
-                    javac -version
-
-                    echo "----- Maven -----"
-                    which mvn
+                    echo "========================================"
+                    echo "MAVEN"
+                    echo "========================================"
                     mvn -version
 
-                    echo "----- Maven Build -----"
+                    echo "========================================"
+                    echo "MAVEN BUILD"
+                    echo "========================================"
+
                     mvn clean package \
                         -DskipTests \
                         -Dmaven.test.skip=true
@@ -47,71 +42,69 @@ pipeline {
             }
         }
 
-        stage('JUnit Tests') {
+        stage('Verify JAR') {
             steps {
-                echo '========================================'
-                echo 'JUNIT TESTS'
-                echo '========================================'
-                echo 'JUnit tests intentionally skipped.'
-            }
-        }
+                sh '''
+                    set -e
 
-        stage('SonarQube') {
-            steps {
-                echo '========================================'
-                echo 'SONARQUBE'
-                echo '========================================'
-                echo 'SonarQube intentionally skipped for now.'
-            }
-        }
+                    echo "========================================"
+                    echo "BUILT ARTIFACT"
+                    echo "========================================"
 
-        stage('OWASP Dependency Check') {
-            steps {
-                echo '========================================'
-                echo 'OWASP DEPENDENCY CHECK'
-                echo '========================================'
-                echo 'OWASP Dependency Check temporarily skipped.'
+                    ls -lh target/
+
+                    test -f target/enterprise-application-1.0-SNAPSHOT.jar
+
+                    echo "JAR found successfully:"
+                    ls -lh target/enterprise-application-1.0-SNAPSHOT.jar
+                '''
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo '========================================'
-                echo 'DOCKER BUILD'
-                echo '========================================'
-                echo 'Docker Build temporarily skipped.'
+                sh '''
+                    set -e
+
+                    echo "========================================"
+                    echo "DOCKER BUILD"
+                    echo "========================================"
+
+                    docker --version
+
+                    docker build \
+                        -t snowman:${BUILD_NUMBER} \
+                        -t snowman:latest \
+                        .
+                '''
             }
         }
 
-        stage('Trivy Scan') {
+        stage('Docker Verify') {
             steps {
-                echo '========================================'
-                echo 'TRIVY SCAN'
-                echo '========================================'
-                echo 'Trivy Scan temporarily skipped.'
+                sh '''
+                    echo "========================================"
+                    echo "DOCKER IMAGE"
+                    echo "========================================"
+
+                    docker images snowman
+                '''
             }
         }
     }
 
     post {
-
         success {
             echo '========================================'
             echo 'PIPELINE SUCCESS'
+            echo 'Maven build + Docker image completed successfully.'
             echo '========================================'
-            echo 'Pipeline completed successfully.'
         }
 
         failure {
             echo '========================================'
             echo 'PIPELINE FAILED'
-            echo '========================================'
-            echo 'Check the failed stage in the Jenkins console.'
-        }
-
-        always {
-            echo '========================================'
-            echo 'PIPELINE FINISHED'
+            echo 'Check the stage above for the error.'
             echo '========================================'
         }
     }
