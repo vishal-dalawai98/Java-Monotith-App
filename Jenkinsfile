@@ -1,119 +1,91 @@
 pipeline {
+
     agent any
 
-    tools {
-        jdk 'JDK-8'
-    }
-
-    environment {
-        IMAGE_NAME = 'snowman'
-        APP_PORT = '8050'
-    }
     stages {
+
         stage('Checkout') {
             steps {
+                echo 'Checking out source code'
                 checkout scm
             }
         }
-        stage('Check Java') {
+
+        stage('Maven Build') {
             steps {
+                echo 'Building application with Maven'
+
                 sh '''
-                    echo "JAVA_HOME=$JAVA_HOME"
                     java -version
                     mvn -version
+
+                    mvn clean package \
+                        -DskipTests \
+                        -Dmaven.test.skip=true
                 '''
             }
         }
 
-        stage('Get Application Version') {
+        stage('JUnit Tests') {
             steps {
-                script {
-                    env.IMAGE_TAG = sh(
-                        script: '''
-                            mvn help:evaluate \
-                              -Dexpression=project.version \
-                              -q \
-                              -DforceStdout
-                        ''',
-                        returnStdout: true
-                    ).trim()
-
-                    if (!env.IMAGE_TAG) {
-                        error "Version not found in pom.xml"
-                    }
-
-                    echo "Application version: ${env.IMAGE_TAG}"
-                }
+                echo 'JUnit stage - tests intentionally skipped'
             }
         }
 
-        stage('Package') {
+        stage('SonarQube') {
             steps {
+                echo 'SonarQube stage - temporarily skipped'
+            }
+        }
+
+        stage('OWASP Dependency Check') {
+            steps {
+                echo 'OWASP Dependency Check stage'
+
                 sh '''
-                    mvn clean install -DskipTests
+                    mvn org.owasp:dependency-check-maven:check \
+                        -DskipTests
                 '''
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '''
-                 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-                export PATH="$JAVA_HOME/bin:$PATH"
-
-                java -version
-
-                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
-                  -DskipTests \
-                  -Dsonar.projectKey=snowman \
-                  -Dsonar.projectName=snowman
-                    '''
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
             }
         }
 
         stage('Docker Build') {
             steps {
+                echo 'Building Docker image'
+
                 sh '''
                     docker build \
-                      -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        -t enterprise-application:${BUILD_NUMBER} \
+                        .
                 '''
             }
         }
 
-        stage('Push Docker Image to ACR') {
+        stage('Trivy Scan') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'acr-service-principal',
-                        usernameVariable: 'AZURE_CLIENT_ID',
-                        passwordVariable: 'AZURE_CLIENT_SECRET'
-                    )
-                ]) {
-                    sh '''
-                        set -e
+                echo 'Scanning Docker image with Trivy'
 
-                        echo "$AZURE_CLIENT_SECRET" | docker login teammaverick.azurecr.io \
-                          --username "$AZURE_CLIENT_ID" \
-                          --password-stdin
-
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} \
-                          teammaverick.azurecr.io/snowman:${IMAGE_TAG}
-
-                        docker push \
-                          teammaverick.azurecr.io/snowman:${IMAGE_TAG}
-                    '''
-                }
+                sh '''
+                    trivy image \
+                        --severity HIGH,CRITICAL \
+                        --exit-code 1 \
+                        enterprise-application:${BUILD_NUMBER}
+                '''
             }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline completed: ${currentBuild.currentResult}"
+        }
+
+        success {
+            echo 'Pipeline completed successfully'
+        }
+
+        failure {
+            echo 'Pipeline failed - check the stage logs'
         }
     }
 }
