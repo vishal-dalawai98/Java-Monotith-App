@@ -1,17 +1,19 @@
 pipeline {
+
     agent any
 
-    environment {
-        IMAGE_NAME = 'snowman'
-        CONTAINER_NAME = 'snowman'
-        HOST_PORT = '8081'
-        CONTAINER_PORT = '8080'
+    tools {
+        jdk 'JDK8'
     }
 
     stages {
 
         stage('Checkout') {
             steps {
+                echo '========================================'
+                echo 'CHECKOUT'
+                echo '========================================'
+
                 checkout scm
             }
         }
@@ -21,20 +23,23 @@ pipeline {
                 sh '''
                     set -e
 
-                    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-                    export PATH="$JAVA_HOME/bin:/usr/bin:/bin"
-
                     echo "========================================"
                     echo "JAVA"
                     echo "========================================"
 
+                    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+                    export PATH="$JAVA_HOME/bin:/usr/bin:/bin"
+
                     echo "JAVA_HOME=$JAVA_HOME"
+
+                    which java
                     java -version
 
                     echo "========================================"
                     echo "MAVEN"
                     echo "========================================"
 
+                    which mvn
                     mvn -version
                 '''
             }
@@ -55,22 +60,16 @@ pipeline {
                     mvn clean package \
                         -DskipTests \
                         -Dmaven.test.skip=true
-                '''
-            }
-        }
-
-        stage('Verify JAR') {
-            steps {
-                sh '''
-                    set -e
 
                     echo "========================================"
-                    echo "VERIFY JAR"
+                    echo "BUILD ARTIFACT"
                     echo "========================================"
 
-                    test -f target/enterprise-application-1.0-SNAPSHOT.jar
+                    ls -lh target/
 
-                    ls -lh target/enterprise-application-1.0-SNAPSHOT.jar
+                    test -f target/Snowman.jar
+
+                    echo "Snowman.jar created successfully"
                 '''
             }
         }
@@ -84,10 +83,25 @@ pipeline {
                     echo "DOCKER BUILD"
                     echo "========================================"
 
+                    docker --version
+
+                    echo "Checking artifact..."
+                    ls -lh target/Snowman.jar
+
+                    test -f target/Snowman.jar
+
+                    echo "Building Docker image..."
+
                     docker build \
-                        -t ${IMAGE_NAME}:${BUILD_NUMBER} \
-                        -t ${IMAGE_NAME}:latest \
+                        -t snowman:${BUILD_NUMBER} \
+                        -t snowman:latest \
                         .
+
+                    echo "========================================"
+                    echo "DOCKER IMAGES"
+                    echo "========================================"
+
+                    docker images snowman
                 '''
             }
         }
@@ -101,51 +115,43 @@ pipeline {
                     echo "DEPLOY"
                     echo "========================================"
 
-                    echo "Stopping old container..."
+                    echo "Docker network..."
 
-                    docker stop ${CONTAINER_NAME} 2>/dev/null || true
+                    docker network inspect snowman-net >/dev/null 2>&1 || \
+                        docker network create snowman-net
 
-                    echo "Removing old container..."
+                    echo "Stopping old Snowman container..."
 
-                    docker rm ${CONTAINER_NAME} 2>/dev/null || true
+                    docker stop snowman 2>/dev/null || true
+                    docker rm snowman 2>/dev/null || true
 
-                    echo "Starting new container..."
+                    echo "Starting new Snowman container..."
 
                     docker run -d \
-                        --name ${CONTAINER_NAME} \
-                        --restart unless-stopped \
-                        -p ${HOST_PORT}:${CONTAINER_PORT} \
-                        ${IMAGE_NAME}:${BUILD_NUMBER}
+                        --name snowman \
+                        --network snowman-net \
+                        -p 8081:8080 \
+                        snowman:${BUILD_NUMBER}
 
                     echo "========================================"
                     echo "CONTAINER STATUS"
                     echo "========================================"
 
-                    docker ps --filter "name=${CONTAINER_NAME}"
+                    sleep 5
+
+                    docker ps -a --filter name=snowman
+
+                    echo "========================================"
+                    echo "APPLICATION LOGS"
+                    echo "========================================"
+
+                    docker logs --tail 50 snowman
 
                     echo "========================================"
                     echo "DEPLOYMENT COMPLETE"
                     echo "========================================"
 
-                    echo "Application: http://<SERVER-IP>:${HOST_PORT}"
-                '''
-            }
-        }
-
-        stage('Deployment Verify') {
-            steps {
-                sh '''
-                    set -e
-
-                    echo "========================================"
-                    echo "DEPLOYMENT VERIFICATION"
-                    echo "========================================"
-
-                    docker ps --filter "name=${CONTAINER_NAME}"
-
-                    echo ""
-                    echo "Container logs:"
-                    docker logs --tail 30 ${CONTAINER_NAME}
+                    echo "Snowman: http://20.9.78.68:8081"
                 '''
             }
         }
@@ -153,28 +159,20 @@ pipeline {
 
     post {
         success {
-            echo '''
-========================================
-PIPELINE SUCCESS
-========================================
-
-Build:     ${BUILD_NUMBER}
-Image:     ${IMAGE_NAME}:${BUILD_NUMBER}
-Container: ${CONTAINER_NAME}
-Port:      8081 -> 8080
-
-Snowman deployment completed successfully.
-'''
+            echo '========================================'
+            echo 'PIPELINE SUCCESS'
+            echo '========================================'
+            echo 'Snowman deployed successfully on port 8081'
         }
 
         failure {
-            echo '''
-========================================
-PIPELINE FAILED
-========================================
+            echo '========================================'
+            echo 'PIPELINE FAILED'
+            echo '========================================'
 
-Check the failed stage and console output.
-'''
+            sh '''
+                docker ps -a --filter name=snowman || true
+            '''
         }
     }
 }
