@@ -1,13 +1,7 @@
 pipeline {
     agent any
 
-    tools {
-        jdk 'JDK8'
-    }
-
     environment {
-        JAVA_HOME = '/usr/lib/jvm/java-8-openjdk-amd64'
-        PATH = "/usr/lib/jvm/java-8-openjdk-amd64/bin:/usr/local/bin:/usr/bin:/bin"
         IMAGE_NAME = 'snowman'
     }
 
@@ -23,6 +17,9 @@ pipeline {
             steps {
                 sh '''
                     set -e
+
+                    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+                    export PATH="$JAVA_HOME/bin:/usr/bin:/bin"
 
                     echo "========================================"
                     echo "JAVA"
@@ -46,6 +43,9 @@ pipeline {
             steps {
                 sh '''
                     set -e
+
+                    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+                    export PATH="$JAVA_HOME/bin:/usr/bin:/bin"
 
                     echo "========================================"
                     echo "MAVEN BUILD"
