@@ -1,5 +1,4 @@
-/*
- * |-------------------------------------------------
+/* * |-------------------------------------------------
  * | Copyright © 2017 Colin But. All rights reserved.
  * |-------------------------------------------------
  */
@@ -12,6 +11,7 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.Table;
+import javax.persistence.Table;
 import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
@@ -19,6 +19,7 @@ import javax.persistence.OneToMany;
 import java.util.Set;
 
 @Entity
+@Table(name = "client")
 @Table(name = "client")
 public class Client {
 
