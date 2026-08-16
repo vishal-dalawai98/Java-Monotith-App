@@ -20,7 +20,6 @@ import java.util.Set;
 
 @Entity
 @Table(name = "client")
-@Table(name = "client")
 public class Client {
 
     @Id
