@@ -3,6 +3,9 @@ pipeline {
 
     environment {
         IMAGE_NAME = 'snowman'
+        CONTAINER_NAME = 'snowman'
+        HOST_PORT = '8081'
+        CONTAINER_PORT = '8080'
     }
 
     stages {
@@ -26,14 +29,12 @@ pipeline {
                     echo "========================================"
 
                     echo "JAVA_HOME=$JAVA_HOME"
-                    which java
                     java -version
 
                     echo "========================================"
                     echo "MAVEN"
                     echo "========================================"
 
-                    which mvn
                     mvn -version
                 '''
             }
@@ -67,27 +68,9 @@ pipeline {
                     echo "VERIFY JAR"
                     echo "========================================"
 
-                    ls -lh target/
-
                     test -f target/enterprise-application-1.0-SNAPSHOT.jar
 
-                    echo "JAR BUILD SUCCESSFUL"
                     ls -lh target/enterprise-application-1.0-SNAPSHOT.jar
-                '''
-            }
-        }
-
-        stage('Docker Check') {
-            steps {
-                sh '''
-                    set -e
-
-                    echo "========================================"
-                    echo "DOCKER CHECK"
-                    echo "========================================"
-
-                    docker --version
-                    docker ps
                 '''
             }
         }
@@ -109,21 +92,60 @@ pipeline {
             }
         }
 
-        stage('Verify Docker Image') {
+        stage('Deploy') {
             steps {
                 sh '''
                     set -e
 
                     echo "========================================"
-                    echo "DOCKER IMAGE"
+                    echo "DEPLOY"
                     echo "========================================"
 
-                    docker images ${IMAGE_NAME}
+                    echo "Stopping old container..."
+
+                    docker stop ${CONTAINER_NAME} 2>/dev/null || true
+
+                    echo "Removing old container..."
+
+                    docker rm ${CONTAINER_NAME} 2>/dev/null || true
+
+                    echo "Starting new container..."
+
+                    docker run -d \
+                        --name ${CONTAINER_NAME} \
+                        --restart unless-stopped \
+                        -p ${HOST_PORT}:${CONTAINER_PORT} \
+                        ${IMAGE_NAME}:${BUILD_NUMBER}
+
+                    echo "========================================"
+                    echo "CONTAINER STATUS"
+                    echo "========================================"
+
+                    docker ps --filter "name=${CONTAINER_NAME}"
+
+                    echo "========================================"
+                    echo "DEPLOYMENT COMPLETE"
+                    echo "========================================"
+
+                    echo "Application: http://<SERVER-IP>:${HOST_PORT}"
+                '''
+            }
+        }
+
+        stage('Deployment Verify') {
+            steps {
+                sh '''
+                    set -e
+
+                    echo "========================================"
+                    echo "DEPLOYMENT VERIFICATION"
+                    echo "========================================"
+
+                    docker ps --filter "name=${CONTAINER_NAME}"
 
                     echo ""
-                    echo "IMAGE CREATED:"
-                    echo "${IMAGE_NAME}:${BUILD_NUMBER}"
-                    echo "${IMAGE_NAME}:latest"
+                    echo "Container logs:"
+                    docker logs --tail 30 ${CONTAINER_NAME}
                 '''
             }
         }
@@ -131,18 +153,28 @@ pipeline {
 
     post {
         success {
-            echo '========================================'
-            echo 'PIPELINE SUCCESS'
-            echo '========================================'
-            echo 'Maven build successful.'
-            echo 'Docker image build successful.'
+            echo '''
+========================================
+PIPELINE SUCCESS
+========================================
+
+Build:     ${BUILD_NUMBER}
+Image:     ${IMAGE_NAME}:${BUILD_NUMBER}
+Container: ${CONTAINER_NAME}
+Port:      8081 -> 8080
+
+Snowman deployment completed successfully.
+'''
         }
 
         failure {
-            echo '========================================'
-            echo 'PIPELINE FAILED'
-            echo '========================================'
-            echo 'Check the failed stage and console output.'
+            echo '''
+========================================
+PIPELINE FAILED
+========================================
+
+Check the failed stage and console output.
+'''
         }
     }
 }
